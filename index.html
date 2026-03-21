@@ -179,7 +179,7 @@
         <div class="ui-layer">
             
             <div id="step1" class="controls-panel step-active">
-                <div class="step-title">Choose Companion</div>
+                <div class="step-title">Choose Agent</div>
                 <div class="options-grid">
                     <div class="option-card" onclick="selectCompanion('single', 'avatar')">
                         <div class="option-icon">🧸</div>
@@ -408,7 +408,7 @@
                         autoGainControl: true,
                     },
                 });
-                
+
                 // ==========================================
                 // NEW: LISTEN FOR BACKEND ERRORS
                 // ==========================================
@@ -450,7 +450,7 @@
                 });
 
                 room.on(RoomEvent.ParticipantConnected, (participant) => {
-                    setStatus('Companion is listening...', 'listening');
+                    setStatus('Agent is listening...', 'listening');
                 });
 
                 // 3. Connect and Publish
@@ -468,9 +468,9 @@
                 
                 // If agent is already in room
                 if (room.remoteParticipants.size > 0) {
-                    setStatus('Companion is listening...', 'listening');
+                    setStatus('Agent is listening...', 'listening');
                 } else {
-                    setStatus('Waiting for companion...', 'static');
+                    setStatus('Waiting for connection...', 'static');
                 }
 
                 startNetworkMonitor();
@@ -563,13 +563,13 @@
                     silenceFrames = 0;
                     if (!isSpeakingNow) {
                         isSpeakingNow = true;
-                        setStatus('Companion is speaking...', 'speaking');
+                        setStatus('Agent is speaking...', 'speaking');
                     }
                 } else {
                     silenceFrames++;
                     if (isSpeakingNow && silenceFrames >= SILENCE_FRAMES_NEEDED) {
                         isSpeakingNow = false;
-                        setStatus('Companion is listening...', 'listening');
+                        setStatus('Agent is listening...', 'listening');
                     }
                 }
             }, 50);
