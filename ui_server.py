@@ -17,8 +17,8 @@ from livekit.protocol.room import RoomConfiguration
 load_dotenv()
 
 BASE_DIR = Path(__file__).resolve().parent
-HOST = os.getenv("UI_SERVER_HOST", "127.0.0.1")
-PORT = int(os.getenv("UI_SERVER_PORT", "8000"))
+HOST = os.getenv("HOST", "0.0.0.0") 
+PORT = int(os.getenv("PORT", "10000"))
 LIVEKIT_URL = os.getenv("LIVEKIT_URL", "").strip()
 LIVEKIT_AGENT_NAME = os.getenv("LIVEKIT_AGENT_NAME", "todemy-voice-agent").strip()
 
