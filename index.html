@@ -1,0 +1,563 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Todemy Voice Agent</title>
+
+    <script src="https://cdn.jsdelivr.net/npm/livekit-client@2.9.1/dist/livekit-client.umd.js"></script>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/simplex-noise/2.4.0/simplex-noise.min.js"></script>
+
+    <style>
+        body, html {
+            background-color: #050A15;
+            margin: 0; padding: 0; width: 100%; height: 100%;
+            font-family: 'Segoe UI', Roboto, Helvetica, sans-serif;
+            overflow: hidden; box-sizing: border-box;
+            color: white;
+        }
+
+        .main-wrapper {
+            display: flex; flex-direction: column; justify-content: space-between; align-items: center;
+            height: 100dvh; width: 100vw; padding: 20px 0; box-sizing: border-box;
+            position: relative;
+        }
+
+        /* The 3D Orb Background */
+        .center-stage {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            display: flex; justify-content: center; align-items: center;
+            z-index: 1; pointer-events: none;
+            opacity: 0; /* Hidden on first page */
+            transition: opacity 0.6s ease;
+        }
+
+        #visualizer canvas {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        /* UI Containers */
+        .ui-layer {
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 100%;
+            height: 100%;
+            justify-content: center;
+        }
+
+        .controls-panel {
+            display: flex; flex-direction: column; align-items: center;
+            background: rgba(25, 33, 50, 0.6); border: 1px solid rgba(255, 255, 255, 0.08);
+            border-radius: 32px; backdrop-filter: blur(25px); -webkit-backdrop-filter: blur(25px);
+            width: 92%; max-width: 480px; box-sizing: border-box;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.4);
+            padding: 30px;
+            transition: opacity 0.4s ease, transform 0.4s ease, visibility 0.4s;
+        }
+
+        /* Step Visibility */
+        .step-hidden { opacity: 0; transform: translateY(15px) scale(0.98); visibility: hidden; position: absolute; pointer-events: none; }
+        .step-active { opacity: 1; transform: translateY(0) scale(1); visibility: visible; position: relative; pointer-events: auto; }
+
+        .step-title { font-size: clamp(20px, 5vw, 24px); font-weight: 600; margin-bottom: 24px; text-align: center; }
+
+        /* Option Cards for Page 1 */
+        .options-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 16px;
+            width: 100%;
+        }
+
+        .option-card {
+            background: rgba(255, 255, 255, 0.05);
+            border: 2px solid transparent;
+            border-radius: 20px;
+            padding: 24px 16px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 12px;
+        }
+
+        .option-card:hover {
+            background: rgba(255, 255, 255, 0.1);
+            transform: translateY(-4px);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        .option-icon { font-size: 36px; }
+        .option-label { font-size: 16px; font-weight: 600; }
+
+        /* Session Controls for Page 2 */
+        #step2 {
+            justify-content: space-between;
+            height: 100%;
+            padding: 20px 0;
+            background: transparent;
+            box-shadow: none;
+            backdrop-filter: none;
+            border: none;
+        }
+
+        .header-bar {
+            background: rgba(0, 0, 0, 0.4); border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 20px; border-radius: 24px; font-size: clamp(14px, 4vw, 16px); color: rgba(255,255,255,0.9);
+            backdrop-filter: blur(10px);
+            display: flex; align-items: center; gap: 12px;
+            margin-top: env(safe-area-inset-top, 10px); /* For mobile notches */
+        }
+
+        .bottom-controls {
+            margin-top: auto;
+            display: flex; flex-direction: column; align-items: center; gap: 16px; width: 100%;
+            margin-bottom: env(safe-area-inset-bottom, 10px); /* For mobile home bar */
+        }
+
+        #message { 
+            font-size: clamp(14px, 4vw, 16px); 
+            font-weight: 600; 
+            text-align: center; 
+            margin-bottom: 8px; 
+            padding: 10px 24px;
+            background: rgba(0, 0, 0, 0.5); 
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 30px;
+            backdrop-filter: blur(12px);
+            max-width: 90%;
+            word-wrap: break-word;
+        }
+
+        button { padding: 16px 32px; font-size: 16px; border-radius: 99px; cursor: pointer; border: none; font-weight: 700; transition: all 0.3s ease; width: 100%; max-width: 260px; }
+        
+        .btn-primary { background: #ffffff; color: #000000; box-shadow: 0 4px 15px rgba(255, 255, 255, 0.2); }
+        .btn-primary:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255, 255, 255, 0.4); }
+        
+        .btn-danger { background: #ff4b4b; color: white; box-shadow: 0 4px 15px rgba(255, 75, 75, 0.3); }
+        .btn-danger:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(255, 75, 75, 0.5); }
+        .btn-disabled { opacity: 0.6; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
+
+        .back-btn { background: transparent; color: rgba(255,255,255,0.6); padding: 8px; min-width: auto; font-size: 14px; width: auto; }
+        .back-btn:hover { color: white; }
+
+        /* Network Status */
+        .latency-badge {
+            position: fixed; top: 16px; right: 16px;
+            background: rgba(0,0,0,0.6); border: 1px solid rgba(255,255,255,0.1);
+            border-radius: 12px; padding: 6px 12px; font-size: 12px;
+            color: rgba(255,255,255,0.7); z-index: 100; font-family: monospace;
+            backdrop-filter: blur(10px); display: flex; align-items: center;
+        }
+        .latency-badge .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; }
+        .latency-badge .dot.green { background: #4ADE80; box-shadow: 0 0 8px #4ADE80; }
+        .latency-badge .dot.yellow { background: #FDE047; box-shadow: 0 0 8px #FDE047; }
+        .latency-badge .dot.red { background: #ff4b4b; box-shadow: 0 0 8px #ff4b4b; }
+
+        @media (max-width: 480px) {
+            .options-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <div class="latency-badge" id="latencyBadge" style="display:none;">
+        <span class="dot green" id="latencyDot"></span>
+        <span id="latencyText">WebRTC</span>
+    </div>
+
+    <div class="center-stage" id="visualizer"></div>
+
+    <div class="main-wrapper">
+        <div class="ui-layer">
+            
+            <div id="step1" class="controls-panel step-active">
+                <div class="step-title">Choose Companion</div>
+                <div class="options-grid">
+                    <div class="option-card" onclick="selectCompanion('single', 'avatar')">
+                        <div class="option-icon">🧸</div>
+                        <div class="option-label">Avatar</div>
+                    </div>
+                    <div class="option-card" onclick="selectCompanion('multi', 'voice_bot')">
+                        <div class="option-icon">🧠</div>
+                        <div class="option-label">Expert Voice Bot</div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="step2" class="controls-panel step-hidden">
+                <div class="header-bar">
+                    <span id="companionBadge">Mode</span>
+                    <button class="back-btn" id="changeCompanionBtn">Change</button>
+                </div>
+                
+                <div class="bottom-controls">
+                    <div id="message">Ready to connect!</div>
+                    <button id="sessionBtn" class="btn-primary">Start Session</button>
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script>
+        // ==========================================
+        // 1. THREE.JS SURREAL ORB ENGINE
+        // ==========================================
+        const visualizerContainer = document.getElementById('visualizer');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(0x050A15, 0.05);
+
+        const camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+        camera.position.z = 8;
+
+        const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true, powerPreference: "high-performance" });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 1.2;
+        visualizerContainer.appendChild(renderer.domElement);
+
+        // Reduced geometry size from 1.6 to 1.1 for a more compact globe
+        const geometry = new THREE.SphereGeometry(1.1, 128, 128);
+        const originalPositions = geometry.attributes.position.clone();
+
+        const material = new THREE.MeshPhysicalMaterial({
+            color: 0x8CA8F9, transmission: 1.0, opacity: 1.0,
+            roughness: 0.15, metalness: 0.1, ior: 1.6, thickness: 3.0,
+            specularIntensity: 2.0, clearcoat: 1.0, clearcoatRoughness: 0.05,
+            emissive: 0x111A33, emissiveIntensity: 0.4
+        });
+
+        const mesh = new THREE.Mesh(geometry, material);
+        // Slightly shift the globe up visually
+        const baseMeshY = 0.2; 
+        mesh.position.y = baseMeshY;
+        scene.add(mesh);
+
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.4);
+        scene.add(ambientLight);
+        const mainLight = new THREE.DirectionalLight(0xffffff, 2.0);
+        mainLight.position.set(5, 10, 7);
+        scene.add(mainLight);
+        const internalLight1 = new THREE.PointLight(0xB892FF, 5.0, 15);
+        const internalLight2 = new THREE.PointLight(0x4ADE80, 3.0, 15);
+        scene.add(internalLight1);
+        scene.add(internalLight2);
+
+        const simplex = new SimplexNoise();
+        let avatarState = 'static'; // Can be 'static', 'listening', or 'speaking'
+
+        const colors = {
+            static:    { mat: 0x8CA8F9, emissive: 0x111A33, light1: 0xB892FF, light2: 0x8CA8F9 },
+            listening: { mat: 0x4ADE80, emissive: 0x0A2B19, light1: 0x4ADE80, light2: 0xFDE047 },
+            speaking:  { mat: 0xFFB677, emissive: 0x33111A, light1: 0xFF719A, light2: 0xFFB677 }
+        };
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now() * 0.001;
+
+            let targetScale = 0.85, speed = 0.15, noiseAmp = 0.08, noiseFreq = 0.3;
+            let curColors = colors.static, bounce = 0;
+
+            if (avatarState === 'listening') {
+                targetScale = 0.95; speed = 0.3; noiseAmp = 0.12; curColors = colors.listening;
+            } else if (avatarState === 'speaking') {
+                targetScale = 1.1; speed = 0.8; noiseAmp = 0.18; noiseFreq = 0.5; curColors = colors.speaking;
+                bounce = Math.sin(time * 10) * 0.08;
+            }
+
+            mesh.scale.lerp(new THREE.Vector3(targetScale, targetScale, targetScale), 0.2);
+            mesh.position.y += (bounce + baseMeshY - mesh.position.y) * 0.2;
+            material.color.lerp(new THREE.Color(curColors.mat), 0.2);
+            material.emissive.lerp(new THREE.Color(curColors.emissive), 0.2);
+            internalLight1.color.lerp(new THREE.Color(curColors.light1), 0.2);
+            internalLight2.color.lerp(new THREE.Color(curColors.light2), 0.2);
+            
+            internalLight1.position.set(Math.sin(time * 1.2) * 3, Math.cos(time * 0.8) * 3, Math.sin(time * 0.5) * 2);
+            internalLight2.position.set(Math.cos(time * 0.9) * -3, Math.sin(time * 1.1) * -3, Math.cos(time * 0.7) * -2);
+            mesh.rotation.y += speed * 0.003;
+            mesh.rotation.x += speed * 0.001;
+
+            const pos = mesh.geometry.attributes.position;
+            const v = new THREE.Vector3();
+            for (let i = 0; i < pos.count; i++) {
+                v.fromBufferAttribute(originalPositions, i);
+                let noise1 = simplex.noise3D(v.x * noiseFreq + time * speed, v.y * noiseFreq + time * speed, v.z * noiseFreq + time * speed);
+                let noise2 = simplex.noise3D(v.x * (noiseFreq * 2.5) - time * (speed * 1.5), v.y * (noiseFreq * 2.5), v.z * (noiseFreq * 2.5)) * 0.3;
+                v.addScaledVector(v.clone().normalize(), (noise1 + noise2) * noiseAmp);
+                pos.setXYZ(i, v.x, v.y, v.z);
+            }
+            pos.needsUpdate = true;
+            mesh.geometry.computeVertexNormals();
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.addEventListener('resize', () => {
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+        });
+
+        // ==========================================
+        // 2. LIVEKIT & UI LOGIC
+        // ==========================================
+        const { Room, RoomEvent, Track, ConnectionState } = LivekitClient;
+
+        let room = null;
+        let selectedMode = "single";
+        let selectedChoice = "avatar";
+        let isSessionActive = false;
+        let isConnecting = false;
+
+        const step1 = document.getElementById('step1');
+        const step2 = document.getElementById('step2');
+        const sessionBtn = document.getElementById('sessionBtn');
+        const companionBadge = document.getElementById('companionBadge');
+        const changeCompanionBtn = document.getElementById('changeCompanionBtn');
+        const msgDiv = document.getElementById('message');
+        const latencyBadge = document.getElementById('latencyBadge');
+        const latencyText = document.getElementById('latencyText');
+        const latencyDot = document.getElementById('latencyDot');
+
+        function setStatus(text, orbState = null) {
+            msgDiv.innerHTML = text;
+            if (orbState) avatarState = orbState;
+        }
+
+        // Navigation
+        window.selectCompanion = function(mode, choice) {
+            selectedMode = mode;
+            selectedChoice = choice;
+            companionBadge.innerText = choice === 'avatar' ? '🧸 Avatar' : '🧠 Expert Voice Bot';
+            
+            step1.classList.remove('step-active');
+            step1.classList.add('step-hidden');
+            setTimeout(() => {
+                step2.classList.remove('step-hidden');
+                step2.classList.add('step-active');
+                
+                // Show globe when moving to Page 2
+                visualizerContainer.style.opacity = '1'; 
+            }, 300);
+        };
+
+        changeCompanionBtn.onclick = () => {
+            if (isSessionActive || isConnecting) return; // Prevent changing while connected
+            step2.classList.remove('step-active');
+            step2.classList.add('step-hidden');
+            setTimeout(() => {
+                step1.classList.remove('step-hidden');
+                step1.classList.add('step-active');
+                
+                // Hide globe when moving back to Page 1
+                visualizerContainer.style.opacity = '0'; 
+            }, 300);
+        };
+
+        // Master Button Toggle Logic
+        sessionBtn.onclick = async () => {
+            if (isConnecting) return;
+
+            if (!isSessionActive) {
+                await startSession();
+            } else {
+                await endSession();
+            }
+        };
+
+        async function startSession() {
+            isConnecting = true;
+            sessionBtn.innerText = "Connecting...";
+            sessionBtn.classList.add('btn-disabled');
+            changeCompanionBtn.style.display = 'none';
+            setStatus('Waking up companion...', 'static');
+
+            try {
+                // 1. Get token via POST request to your Python server
+                const resp = await fetch('/token', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        mode: selectedMode,
+                        choice: selectedChoice
+                    })
+                });
+
+                if (!resp.ok) throw new Error(`Server error: ${resp.status}`);
+                const { token, serverUrl } = await resp.json();
+
+                setStatus('Joining room...', 'static');
+
+                // 2. Create LiveKit Room
+                room = new Room({
+                    adaptiveStream: true,
+                    dynacast: true,
+                    audioCaptureDefaults: {
+                        echoCancellation: true,
+                        noiseSuppression: true,
+                        autoGainControl: true,
+                    },
+                });
+
+                setupAudioAnalyser();
+
+                room.on(RoomEvent.ConnectionStateChanged, (state) => {
+                    if (state === ConnectionState.Disconnected && isSessionActive) {
+                        endSession(true);
+                    }
+                });
+
+                room.on(RoomEvent.ParticipantConnected, (participant) => {
+                    setStatus('Companion is listening...', 'listening');
+                });
+
+                // 3. Connect and Publish
+                await room.connect(serverUrl, token);
+                await room.localParticipant.setMicrophoneEnabled(true);
+
+                // Update UI state
+                isSessionActive = true;
+                latencyBadge.style.display = 'flex';
+                
+                // Transform button to "End Session"
+                sessionBtn.innerText = "End Session";
+                sessionBtn.classList.remove('btn-primary', 'btn-disabled');
+                sessionBtn.classList.add('btn-danger');
+                
+                // If agent is already in room
+                if (room.remoteParticipants.size > 0) {
+                    setStatus('Companion is listening...', 'listening');
+                } else {
+                    setStatus('Waiting for companion...', 'static');
+                }
+
+                startNetworkMonitor();
+
+            } catch (err) {
+                console.error('Connection failed:', err);
+                setStatus('Connection failed. Please try again.', 'static');
+                resetUI();
+            } finally {
+                isConnecting = false;
+            }
+        }
+
+        async function endSession(unexpected = false) {
+            isConnecting = true;
+            sessionBtn.innerText = "Disconnecting...";
+            sessionBtn.classList.add('btn-disabled');
+            setStatus(unexpected ? 'Connection lost.' : 'Session ended.', 'static');
+
+            if (room) {
+                try {
+                    const data = new TextEncoder().encode(JSON.stringify({ type: "end_session" }));
+                    await room.localParticipant.publishData(data, { topic: "todemy-events" });
+                } catch(e) {}
+
+                await room.disconnect();
+                room = null;
+            }
+
+            setTimeout(() => {
+                resetUI();
+                isConnecting = false;
+            }, 1000);
+        }
+
+        function resetUI() {
+            isSessionActive = false;
+            latencyBadge.style.display = 'none';
+            changeCompanionBtn.style.display = 'block';
+            
+            // Revert button to "Start Session"
+            sessionBtn.innerText = "Start Session";
+            sessionBtn.classList.remove('btn-danger', 'btn-disabled');
+            sessionBtn.classList.add('btn-primary');
+            
+            // Note: We leave visualizerContainer.style.opacity = '1' so the static globe stays on screen.
+            setStatus('Ready to connect!', 'static');
+        }
+
+        function setupAudioAnalyser() {
+            let audioAnalyser = null;
+            let analyserData = null;
+            let isSpeakingNow = false;
+            let silenceFrames = 0;
+            const SILENCE_THRESHOLD = 5; // Lowered to detect speaking quicker
+            const SILENCE_FRAMES_NEEDED = 3; // Reduced frames needed for snappier cutoff (150ms)
+
+            room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+                if (track.kind === Track.Kind.Audio) {
+                    const audioEl = track.attach();
+                    document.body.appendChild(audioEl);
+
+                    try {
+                        const actx = new (window.AudioContext || window.webkitAudioContext)();
+                        const source = actx.createMediaStreamSource(new MediaStream([track.mediaStreamTrack]));
+                        audioAnalyser = actx.createAnalyser();
+                        audioAnalyser.fftSize = 256;
+                        source.connect(audioAnalyser);
+                        analyserData = new Uint8Array(audioAnalyser.frequencyBinCount);
+                    } catch(e) {
+                        console.warn('Could not create audio analyser:', e);
+                    }
+                }
+            });
+
+            room.on(RoomEvent.TrackUnsubscribed, (track) => {
+                track.detach().forEach(el => el.remove());
+            });
+
+            // Reduced interval from 150ms to 50ms for hyper-responsive visuals
+            setInterval(() => {
+                if (!audioAnalyser || !analyserData || !isSessionActive) return;
+
+                audioAnalyser.getByteFrequencyData(analyserData);
+                let sum = 0;
+                for (let i = 0; i < analyserData.length; i++) sum += analyserData[i];
+                const avgLevel = sum / analyserData.length;
+
+                if (avgLevel > SILENCE_THRESHOLD) {
+                    silenceFrames = 0;
+                    if (!isSpeakingNow) {
+                        isSpeakingNow = true;
+                        setStatus('Companion is speaking...', 'speaking');
+                    }
+                } else {
+                    silenceFrames++;
+                    if (isSpeakingNow && silenceFrames >= SILENCE_FRAMES_NEEDED) {
+                        isSpeakingNow = false;
+                        setStatus('Companion is listening...', 'listening');
+                    }
+                }
+            }, 50);
+        }
+
+        function startNetworkMonitor() {
+            const interval = setInterval(() => {
+                if (!room || !isSessionActive) {
+                    clearInterval(interval);
+                    return;
+                }
+                const rtt = room.localParticipant?.connectionQuality;
+                if (rtt !== undefined) {
+                    const labels = ['Excellent', 'Good', 'Fair', 'Poor'];
+                    const dotColors = ['green', 'green', 'yellow', 'red'];
+                    latencyText.textContent = `WebRTC · ${labels[rtt] || 'Unknown'}`;
+                    latencyDot.className = `dot ${dotColors[rtt] || 'yellow'}`;
+                }
+            }, 3000);
+        }
+    </script>
+</body>
+</html>
