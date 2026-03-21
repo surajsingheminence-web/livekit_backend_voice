@@ -408,6 +408,38 @@
                         autoGainControl: true,
                     },
                 });
+                
+                // ==========================================
+                // NEW: LISTEN FOR BACKEND ERRORS
+                // ==========================================
+                room.on(RoomEvent.DataReceived, (payload, participant, kind, topic) => {
+                    if (topic === "todemy-events") {
+                        try {
+                            const msg = JSON.parse(new TextDecoder().decode(payload));
+                            
+                            if (msg.type === "billing_error") {
+                                console.error("Backend Error:", msg.message);
+                                
+                                // Display the error loudly in the UI
+                                const msgDiv = document.getElementById('message');
+                                msgDiv.innerHTML = `<span style="color: #ff4b4b; font-weight: bold;">⚠️ ${msg.message}</span>`;
+                                
+                                // Stop the globe animation
+                                document.getElementById('visualizer').style.opacity = '0';
+                                
+                                // Change button state
+                                const sessionBtn = document.getElementById('sessionBtn');
+                                sessionBtn.innerText = "Connection Failed";
+                                sessionBtn.classList.add('btn-disabled');
+                                sessionBtn.classList.remove('btn-danger');
+                                
+                                // Gracefully kill the broken connection
+                                setTimeout(() => endSession(true), 3000); 
+                            }
+                        } catch(e) {}
+                    }
+                });
+                // ==========================================
 
                 setupAudioAnalyser();
 
